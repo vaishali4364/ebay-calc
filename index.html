@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2b3ea0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="eBay Calc">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>eBay Price Calculator</title>
+<style>
+/* Layout: inputs on the left, live result card on the right; shipping rate table below. Utilitarian, number-first. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#16202e; --muted:#5b6778; --line:#d9dfe8;
+  --accent:#2b3ea0; --accent-ink:#ffffff; --good:#17794a; --warn:#a15c00; --hi:#e8ecfb;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141c; --surface:#171e29; --ink:#e7ecf4; --muted:#93a0b4; --line:#2a3445;
+  --accent:#8c9cff; --accent-ink:#0f141c; --good:#4cc38a; --warn:#e6a23c; --hi:#222c4a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141c; --surface:#171e29; --ink:#e7ecf4; --muted:#93a0b4; --line:#2a3445;
+  --accent:#8c9cff; --accent-ink:#0f141c; --good:#4cc38a; --warn:#e6a23c; --hi:#222c4a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);margin:0;
+  padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-size:1.6rem;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+h2{font-size:1rem;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;align-items:start}
+@media(max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fields .full{grid-column:1/-1}
+@media(max-width:420px){.fields{grid-template-columns:minmax(0,1fr)}}
+label{display:flex;flex-direction:column;gap:5px;font-size:.82rem;color:var(--muted);font-weight:500}
+input,select{font:inherit;font-family:var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:7px;padding:9px 10px;width:100%;min-width:0}
+select{font-family:var(--sans)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:.76rem;color:var(--muted);font-weight:400}
+.result{display:flex;flex-direction:column;gap:14px}
+.price{font:600 2.6rem/1 var(--mono);color:var(--accent);letter-spacing:-.02em;word-break:break-all}
+.price small{font-size:.9rem;color:var(--muted);font-weight:500;margin-left:6px}
+.lines{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.lines div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.lines span:last-child{font-family:var(--mono);text-align:right}
+.lines .strong{font-weight:600}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.78rem;font-weight:600;border:1px solid currentColor}
+.ok{color:var(--good)} .bad{color:var(--warn)}
+.note{font-size:.8rem;color:var(--muted)}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+.tools label{flex:1 1 160px}
+button{font:600 .85rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:10px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.tablebox{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{padding:7px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{position:sticky;top:0;background:var(--surface);font-family:var(--sans);font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+tr.sel td{background:var(--hi);font-weight:600}
+td.col{color:var(--accent);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.price{transition:color .2s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>eBay Price Calculator</h1>
+    <p class="sub">Enter item cost, profit you want and parcel weight. Get the listing price that ends in .99, with shipping and eBay fee covered.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="in-h">
+      <h2 id="in-h">Inputs</h2>
+      <div class="fields">
+        <label class="full">Marketplace
+          <select id="mp"><option value="UK">UK (GBP)</option><option value="USA">USA (USD)</option><option value="Australia">Australia (AUD)</option><option value="Canada">Canada (CAD)</option></select>
+        </label>
+        <label>Item cost (INR)<input id="cost" type="number" inputmode="decimal" min="0" step="any" value="450"></label>
+        <label>Desired profit (INR)<input id="profit" type="number" inputmode="decimal" min="0" step="any" value="300"></label>
+        <label>Shipping weight (grams)<input id="wt" type="number" inputmode="numeric" min="0" step="1" value="250">
+          <span class="hint" id="wthint"></span></label>
+        <label>eBay fee (%)<input id="fee" type="number" inputmode="decimal" min="0" max="60" step="any" value="15"></label>
+        <label class="full"><span>Exchange rate (INR per <span id="cur">GBP</span>)</span><input id="rate" type="number" inputmode="decimal" min="0" step="any" value="115">
+          <span class="hint">Exchange rates start at the same defaults as the reference calculator; the fee is a placeholder. Change them to match your own account and today's rate. They are remembered per marketplace in this browser.</span></label>
+        <label class="full">Shipping override (INR, optional)<input id="shipov" type="number" inputmode="decimal" min="0" step="any" placeholder="Leave empty to use the rate table"></label>
+      </div>
+    </section>
+
+    <section class="panel result" aria-live="polite" aria-labelledby="out-h">
+      <h2 id="out-h" style="margin:0">Final listing price</h2>
+      <div class="price" id="price">-</div>
+      <div class="lines" id="lines"></div>
+      <div id="status"></div>
+      <p class="note">Assumes free shipping to the buyer, so the shipping rate and the eBay fee both come out of the listing price. Shipping rates include GST (ITPS). Results match the reference calculator slab by slab (its table shows the rates rounded to whole rupees).</p>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="tb-h">
+    <h2 id="tb-h">Shipping rates reference (INR, ITPS, GST included)</h2>
+    <div class="tools">
+      <label>Jump to weight (g)<input id="jump" type="number" inputmode="numeric" min="50" max="5000" step="50" placeholder="e.g. 750"></label>
+      <button class="ghost" id="copy" type="button">Copy table as CSV</button>
+    </div>
+    <div class="tablebox" id="tbox" tabindex="0" role="region" aria-label="Shipping rate table">
+      <table><thead><tr><th>Weight (g)</th><th>USA</th><th>UK</th><th>Canada</th><th>Australia</th></tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+  </section>
+</div>
+<script>
+const RATES=[[50,472,236,401,466],[100,513,266,448,519],[150,555,295,496,572],[200,596,325,543,625],[250,637,354,590,679],[300,679,384,637,732],[350,720,413,684,785],[400,761,443,732,838],[450,802,472,779,891],[500,844,502,826,944],[550,885,531,873,997],[600,926,561,920,1050],[650,968,590,968,1103],[700,1009,620,1015,1156],[750,1050,649,1062,1210],[800,1092,679,1109,1263],[850,1133,708,1156,1316],[900,1174,738,1204,1369],[950,1215,767,1251,1422],[1000,1257,797,1298,1475],[1050,1298,826,1345,1528],[1100,1339,856,1392,1581],[1150,1381,885,1440,1634],[1200,1422,915,1487,1687],[1250,1463,944,1534,1741],[1300,1505,974,1581,1794],[1350,1546,1003,1628,1847],[1400,1587,1033,1676,1900],[1450,1628,1062,1723,1953],[1500,1670,1092,1770,2006],[1550,1711,1121,1817,2059],[1600,1752,1151,1864,2112],[1650,1794,1180,1912,2165],[1700,1835,1210,1959,2218],[1750,1876,1239,2006,2272],[1800,1918,1269,2053,2325],[1850,1959,1298,2100,2378],[1900,2000,1328,2148,2431],[1950,2041,1357,2195,2484],[2000,2083,1387,2242,2537],[2050,2124,1416,2289,2590],[2100,2165,1446,2336,2643],[2150,2207,1475,2384,2696],[2200,2248,1505,2431,2749],[2250,2289,1534,2478,2803],[2300,2331,1564,2525,2856],[2350,2372,1593,2572,2909],[2400,2413,1623,2620,2962],[2450,2454,1652,2667,3015],[2500,2496,1682,2714,3068],[2550,2537,1711,2761,3121],[2600,2578,1741,2808,3174],[2650,2620,1770,2856,3227],[2700,2661,1800,2903,3280],[2750,2702,1829,2950,3334],[2800,2744,1859,2997,3387],[2850,2785,1888,3044,3440],[2900,2826,1918,3092,3493],[2950,2867,1947,3139,3546],[3000,2909,1977,3186,3599],[3050,2950,2006,3233,3652],[3100,2991,2036,3280,3705],[3150,3033,2065,3328,3758],[3200,3074,2095,3375,3811],[3250,3115,2124,3422,3865],[3300,3157,2154,3469,3918],[3350,3198,2183,3516,3971],[3400,3239,2213,3564,4024],[3450,3280,2242,3611,4077],[3500,3322,2272,3658,4130],[3550,3363,2301,3705,4183],[3600,3404,2331,3752,4236],[3650,3446,2360,3800,4289],[3700,3487,2390,3847,4342],[3750,3528,2419,3894,4396],[3800,3570,2449,3941,4449],[3850,3611,2478,3988,4502],[3900,3652,2508,4036,4555],[3950,3693,2537,4083,4608],[4000,3735,2567,4130,4661],[4050,3776,2596,4177,4714],[4100,3817,2626,4224,4767],[4150,3859,2655,4272,4820],[4200,3900,2685,4319,4873],[4250,3941,2714,4366,4927],[4300,3983,2744,4413,4980],[4350,4024,2773,4460,5033],[4400,4065,2803,4508,5086],[4450,4106,2832,4555,5139],[4500,4148,2862,4602,5192],[4550,4189,2891,4649,5245],[4600,4230,2921,4696,5298],[4650,4272,2950,4744,5351],[4700,4313,2980,4791,5404],[4750,4354,3009,4838,5458],[4800,4396,3039,4885,5511],[4850,4437,3068,4932,5564],[4900,4478,3098,4980,5617],[4950,4519,3127,5027,5670],[5000,4561,3157,5074,5723]]; // [weight, USA, UK, Canada, Australia]
+const MP={UK:{cur:"GBP",sym:"\u00a3",col:2,fee:15,rate:115,s0:236,ds:29.5},USA:{cur:"USD",sym:"$",col:1,fee:15,rate:85,s0:472,ds:41.3},
+          Australia:{cur:"AUD",sym:"A$",col:4,fee:15,rate:60,s0:466.1,ds:53.1},Canada:{cur:"CAD",sym:"C$",col:3,fee:15,rate:59,s0:401.2,ds:47.2}};
+const $=id=>document.getElementById(id);
+const inr=n=>"\u20b9"+Math.round(n).toLocaleString("en-IN");
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+// table
+$("tbody").innerHTML=RATES.map(r=>`<tr data-w="${r[0]}"><td>${r[0]}</td><td data-c="1">${r[1].toLocaleString("en-IN")}</td><td data-c="2">${r[2].toLocaleString("en-IN")}</td><td data-c="3">${r[3].toLocaleString("en-IN")}</td><td data-c="4">${r[4].toLocaleString("en-IN")}</td></tr>`).join("");
+
+// Exact per-slab rates (the reference table shows them rounded): cost = s0 + ds*(slab-1), slab = weight rounded up to 50 g steps.
+function shippingFor(w,m){
+  if(!(w>=0)) return null;
+  if(w===0) return {slab:0,cost:0};
+  const n=Math.ceil(w/50);
+  return {slab:n*50,cost:Math.round((m.s0+m.ds*(n-1))*100)/100};
+}
+// .99 rule of the reference calculator: next price ending in .99 that is above the 2-decimal price.
+function price99(F){ if(F<=0) return 0; let p=Math.floor(F)+0.99; if(p<=F+1e-9) p+=1; return Math.round(p*100)/100; }
+
+function loadMp(){
+  const m=MP[$("mp").value], saved=store.get("ebaycalc:"+$("mp").value)||{};
+  $("cur").textContent=m.cur;
+  $("fee").value=saved.fee??m.fee; $("rate").value=saved.rate??m.rate;
+}
+function calc(){
+  const mpKey=$("mp").value, m=MP[mpKey];
+  const cost=+$("cost").value||0, profit=+$("profit").value||0, w=+$("wt").value, fee=+$("fee").value||0, rate=+$("rate").value||m.rate;
+  store.set("ebaycalc:"+mpKey,{fee:$("fee").value===""?m.fee:fee,rate:rate||m.rate});
+  const ov=$("shipov").value!==""?+$("shipov").value:null;
+  const sh=shippingFor(w,m);
+  let ship=ov!==null?ov:(sh?sh.cost:null);
+  $("wthint").textContent=sh?(w===0?"0 g means no shipping cost":(w>5000?`Over 5,000 g: rate continues at the same step (slab ${sh.slab} g)`:`Rate slab: up to ${sh.slab} g`)):"Enter a weight of 0 or more";
+  document.querySelectorAll("#tbody tr.sel").forEach(e=>e.classList.remove("sel"));
+  document.querySelectorAll("#tbody td.col").forEach(e=>e.classList.remove("col"));
+  if(sh){ const tr=document.querySelector(`#tbody tr[data-w="${sh.slab}"]`); if(tr){tr.classList.add("sel");tr.querySelector(`td[data-c="${m.col}"]`).classList.add("col");} }
+  if(ship===null||!(rate>0)||fee>=100){
+    $("price").textContent="-"; $("lines").innerHTML=""; $("status").innerHTML='<span class="pill bad">Need weight, shipping and exchange rate</span>'; return;
+  }
+  const needInr=(cost+profit+ship)/(1-fee/100);
+  const exact=Math.round(needInr/rate*100)/100, final=price99(exact);
+  const gross=final*rate, feeAmt=gross*fee/100, net=gross-feeAmt, realProfit=net-cost-ship;
+  $("price").innerHTML=`${m.sym}${final.toFixed(2)}<small>${m.cur}</small>`;
+  const L=[["Item cost",inr(cost)],["Shipping ("+m.cur+" route"+(ov!==null?", override":"")+")",inr(ship)],
+    ["Desired profit",inr(profit)],["Price before .99 rounding",`${m.sym}${exact.toFixed(2)}`],
+    ["Sale value at final price",inr(gross)],[`eBay fee (${fee}%)`,"- "+inr(feeAmt)],
+    ["Profit at final price",inr(realProfit)]];
+  $("lines").innerHTML=L.map((x,i)=>`<div class="${i===L.length-1?"strong":""}"><span>${x[0]}</span><span>${x[1]}</span></div>`).join("");
+  $("status").innerHTML=realProfit>=profit-0.5?`<span class="pill ok">Meets your profit target</span>`:`<span class="pill bad">Below target</span>`;
+}
+document.querySelectorAll("input,select").forEach(e=>e.addEventListener("input",e.id==="mp"?()=>{loadMp();calc()}:calc));
+$("jump").addEventListener("input",()=>{const v=Math.ceil((+$("jump").value||0)/50)*50;const tr=document.querySelector(`#tbody tr[data-w="${v}"]`);if(tr)$("tbox").scrollTop=tr.offsetTop-40;});
+$("copy").addEventListener("click",async()=>{
+  const csv="weight,USA,UK,Canada,Australia\n"+RATES.map(r=>r.join(",")).join("\n");
+  try{await navigator.clipboard.writeText(csv);$("copy").textContent="Copied"}catch(e){
+    const t=document.createElement("textarea");t.value=csv;document.body.appendChild(t);t.select();try{document.execCommand("copy");$("copy").textContent="Copied"}catch(_){$("copy").textContent="Copy not available"}t.remove();}
+  setTimeout(()=>$("copy").textContent="Copy table as CSV",1800);
+});
+loadMp(); calc();
+if("serviceWorker" in navigator){window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").catch(()=>{})});}
+</script>
+
+</body>
+</html>
